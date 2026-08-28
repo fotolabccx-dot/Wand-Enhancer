@@ -432,6 +432,85 @@ namespace WandEnhancer.Core
                 dll.CopyTo(fileStream);
             }
             _logger("[ENHANCER] Proxy DLL attached", ELogType.Info);
+
+            EnsureProxyDllLoadable(_weModConfig.ExecutablePath);
+        }
+
+        // Newer Wand builds set DependentLoadFlags = LOAD_LIBRARY_SEARCH_SYSTEM32 (0x0800)
+        // in the PE Load Config directory. That flag forces every statically-imported DLL,
+        // including version.dll, to resolve from %SystemRoot%\System32 only, so the proxy
+        // DLL dropped next to Wand.exe is never loaded and disable_asar_integrity() never
+        // runs. The ASAR-integrity fuse then stays enabled and the patched app.asar is
+        // rejected, causing Wand to exit immediately. Clear the bit so the app-directory
+        // proxy is picked up again. Idempotent and a no-op on builds that do not set it.
+        private void EnsureProxyDllLoadable(string exePath)
+        {
+            const ushort LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x0800;
+            // Offset of DependentLoadFlags (WORD) inside IMAGE_LOAD_CONFIG_DIRECTORY32/64.
+            const int DependentLoadFlagsOffset = 0x4E;
+            // Load Config is data directory entry index 10.
+            const int LoadConfigDirectoryIndex = 10;
+
+            if (!File.Exists(exePath))
+            {
+                _logger("[ENHANCER] Executable not found; skipping DLL search-order fix", ELogType.Warn);
+                return;
+            }
+
+            byte[] pe = File.ReadAllBytes(exePath);
+
+            int peHeader = BitConverter.ToInt32(pe, 0x3C);
+            ushort optionalMagic = BitConverter.ToUInt16(pe, peHeader + 24);
+            bool isPe32Plus = optionalMagic == 0x20B;
+
+            int optionalHeader = peHeader + 24;
+            int dataDirectories = optionalHeader + (isPe32Plus ? 112 : 96);
+            uint loadConfigRva = BitConverter.ToUInt32(pe, dataDirectories + LoadConfigDirectoryIndex * 8);
+            if (loadConfigRva == 0)
+            {
+                _logger("[ENHANCER] No Load Config directory; skipping DLL search-order fix", ELogType.Info);
+                return;
+            }
+
+            ushort numberOfSections = BitConverter.ToUInt16(pe, peHeader + 6);
+            ushort sizeOfOptionalHeader = BitConverter.ToUInt16(pe, peHeader + 20);
+            int sectionTable = optionalHeader + sizeOfOptionalHeader;
+
+            int loadConfigOffset = -1;
+            for (int i = 0; i < numberOfSections; i++)
+            {
+                int section = sectionTable + i * 40;
+                uint virtualSize = BitConverter.ToUInt32(pe, section + 8);
+                uint virtualAddress = BitConverter.ToUInt32(pe, section + 12);
+                uint rawPointer = BitConverter.ToUInt32(pe, section + 20);
+                if (loadConfigRva >= virtualAddress && loadConfigRva < virtualAddress + Math.Max(virtualSize, 1u))
+                {
+                    loadConfigOffset = (int)(loadConfigRva - virtualAddress + rawPointer);
+                    break;
+                }
+            }
+            if (loadConfigOffset < 0)
+            {
+                _logger("[ENHANCER] Could not map Load Config directory; skipping DLL search-order fix", ELogType.Warn);
+                return;
+            }
+
+            int flagsOffset = loadConfigOffset + DependentLoadFlagsOffset;
+            ushort flags = BitConverter.ToUInt16(pe, flagsOffset);
+            if ((flags & LOAD_LIBRARY_SEARCH_SYSTEM32) == 0)
+            {
+                return;
+            }
+
+            ushort patched = (ushort)(flags & ~LOAD_LIBRARY_SEARCH_SYSTEM32);
+            pe[flagsOffset] = (byte)(patched & 0xFF);
+            pe[flagsOffset + 1] = (byte)(patched >> 8);
+            File.WriteAllBytes(exePath, pe);
+
+            _logger(
+                $"[ENHANCER] Cleared LOAD_LIBRARY_SEARCH_SYSTEM32 in {Path.GetFileName(exePath)} " +
+                $"(DependentLoadFlags 0x{flags:X4} -> 0x{patched:X4}) so the proxy DLL can load",
+                ELogType.Success);
         }
 
         public void Patch()
