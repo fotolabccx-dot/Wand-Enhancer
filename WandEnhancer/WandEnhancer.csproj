@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <Import Project="..\packages\ILRepack.2.0.41\build\ILRepack.props" Condition="Exists('..\packages\ILRepack.2.0.41\build\ILRepack.props')" />
     <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
@@ -82,6 +82,7 @@
         <Compile Include="Core\Patching\Shared\PeImage.cs" />
         <Compile Include="Core\Patching\Shared\ElectronFuseWire.cs" />
         <Compile Include="Core\Patching\Shared\DiskFusePatch.cs" />
+        <Compile Include="Core\Patching\Shared\AsarHeaderHash.cs" />
         <Compile Include="Core\Patching\Shared\IconTransplant.cs" />
         <Compile Include="Core\Patching\Shared\LauncherDeployment.cs" />
         <Compile Include="Core\Patching\Content\AsarContentPatcher.cs" />
@@ -94,6 +95,8 @@
         <Compile Include="Core\Patching\Strategies\Supervised\SupervisedStrategy.cs" />
         <Compile Include="Core\Patching\Strategies\Static\DotNetImage.cs" />
         <Compile Include="Core\Patching\Strategies\Static\AuxTrustNeutralizer.cs" />
+        <Compile Include="Core\Patching\Strategies\Static\AuxFuseIntegrityNeutralizer.cs" />
+        <Compile Include="Core\Patching\Strategies\Static\AsarIntegrityResourcePatch.cs" />
         <Compile Include="Core\Patching\Strategies\Static\StaticStrategy.cs" />
         <Compile Include="Core\UpdateNotifier.cs" Condition="'$(EnableUpdateNotifications)' == 'true'" />
         <Compile Include="View\Popups\UpdatePopup.xaml.cs" Condition="'$(EnableUpdateNotifications)' == 'true'">
